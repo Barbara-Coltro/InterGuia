@@ -1,31 +1,50 @@
 import { router } from 'expo-router';
-import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import colors from '../theme/colors';
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Footer from '../components/Footer';
+import Header from '../components/Header';
 
 export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <View style={styles.container}>
-        <Text style={styles.title}>Home</Text>
-        <Text style={styles.subtitle}>Bem-vinda ao Inter Guia 🎉</Text>
+      <Header />
 
-        <TouchableOpacity style={styles.btn} onPress={() => router.replace('/login')}>
-          <Text style={styles.btnText}>Sair</Text>
+      <View style={styles.center}>
+        <TouchableOpacity style={[styles.btn, styles.btnBlue]} onPress={() => router.push('/search')} activeOpacity={0.9}>
+          <Text style={styles.btnText}>🔎 Buscar</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.btn, styles.btnPink]} onPress={() => router.push('/publish')} activeOpacity={0.9}>
+          <Text style={styles.btnText}>＋ Publicar</Text>
         </TouchableOpacity>
       </View>
+
+      <Footer />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
-  title: { fontSize: 26, fontWeight: '800', color: colors.primary, marginBottom: 6 },
-  subtitle: { fontSize: 16, color: '#333', marginBottom: 16 },
-  btn: {
-    backgroundColor: '#2F80ED', paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: 10, alignItems: 'center',
+  safe: { flex: 1, backgroundColor: '#EFEFEF' },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
+    paddingHorizontal: 16,
   },
+  btn: {
+    width: '80%',
+    maxWidth: 360,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  btnBlue: { backgroundColor: '#2F80ED' },
+  btnPink: { backgroundColor: '#FF2D87' },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });
