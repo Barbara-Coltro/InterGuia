@@ -6,7 +6,16 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
      "extra": {
-      "googleMapsApiKey": "AIzaSyCjoFRLOJoD0T4AyKzazS-Ap9S1_AkUuYo"
+      "googleMapsApiKey": "AIzaSyCjoFRLOJoD0T4AyKzazS-Ap9S1_AkUuYo",
+
+       "firebase": {
+        "apiKey": "AIzaSyB11ry6IVjyJ2tdS9u-adfqUee8xj1dyd4",
+        "authDomain": "interguia-c94be.firebaseapp.com",
+        "projectId": "interguia-c94be",
+        "storageBucket": "interguia-c94be.firebasestorage.app",
+        "messagingSenderId": "414811933195",
+        "appId": "1:414811933195:web:bc6f67d55188515746d50e"
+      }
     },
     "scheme": "interguia",
     "userInterfaceStyle": "automatic",

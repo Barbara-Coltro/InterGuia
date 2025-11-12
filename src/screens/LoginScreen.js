@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -13,27 +15,46 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { observeAuth, signInEmailPassword } from '../services/auth';
 import colors from '../theme/colors';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const emailTouched = email.length > 0;
   const emailInvalid = emailTouched && !isValidEmail(email);
   const validToEnter = isValidEmail(email) && pass.length > 0;
 
-  function onEnter() {
-    if (!validToEnter) return;
-    router.replace('/home');
+  useEffect(() => {
+    // se já estiver logada, manda pra Home automaticamente
+    const unsub = observeAuth((user) => {
+      if (user) router.replace('/home');
+    });
+    return unsub;
+  }, []);
+
+  async function onEnter() {
+    if (!validToEnter || loading) return;
+    try {
+      setLoading(true);
+      await signInEmailPassword(email.trim(), pass);
+      // onAuthStateChanged redireciona; mas podemos garantir também:
+      router.replace('/home');
+    } catch (err) {
+      const msg = mapFirebaseAuthError(err);
+      Alert.alert('Não foi possível entrar', msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* keyboard avoiding + scroll ajustado */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
@@ -56,7 +77,7 @@ export default function LoginScreen() {
             <View style={{ width: 28 }} />
           </View>
 
-          {/* CONTEÚDO CENTRAL FIXO */}
+          {/* CONTEÚDO CENTRAL */}
           <View style={styles.centerWrapper}>
             <View style={styles.form}>
               <Labeled label="Login">
@@ -69,9 +90,7 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   style={[styles.input, emailInvalid && styles.inputError]}
                 />
-                {emailInvalid && (
-                  <Text style={styles.errorText}>Digite um e-mail válido.</Text>
-                )}
+                {emailInvalid && <Text style={styles.errorText}>Digite um e-mail válido.</Text>}
               </Labeled>
 
               <Labeled label="Senha">
@@ -86,40 +105,36 @@ export default function LoginScreen() {
                   />
                   <TouchableOpacity
                     style={styles.eyeBtn}
-                    onPress={() => setShowPass(v => !v)}
+                    onPress={() => setShowPass((v) => !v)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Ionicons
-                      name={showPass ? 'eye-off' : 'eye'}
-                      size={22}
-                      color="#666"
-                    />
+                    <Ionicons name={showPass ? 'eye-off' : 'eye'} size={22} color="#666" />
                   </TouchableOpacity>
                 </View>
               </Labeled>
 
               <TouchableOpacity
-                style={[styles.cta, !validToEnter && styles.ctaDisabled]}
+                style={[styles.cta, (!validToEnter || loading) && styles.ctaDisabled]}
                 onPress={onEnter}
                 activeOpacity={0.9}
-                disabled={!validToEnter}
+                disabled={!validToEnter || loading}
               >
-                <Text style={styles.ctaText}>Entrar</Text>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.ctaText}>Entrar</Text>
+                )}
               </TouchableOpacity>
 
+              {/* Google (só visual por enquanto) */}
               <TouchableOpacity style={styles.googleBtn} activeOpacity={0.9}>
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-                >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Ionicons name="logo-google" size={18} color="#4285F4" />
                   <Text style={styles.googleText}>Entrar com Google</Text>
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => router.push('/remember')}
-                style={{ alignSelf: 'center', marginTop: 14 }}
-              >
+              <TouchableOpacity onPress={() => router.push('/remember')} style={{ alignSelf: 'center', marginTop: 14 }}>
                 <Text style={styles.linkMuted}>Esqueceu o login?</Text>
               </TouchableOpacity>
             </View>
@@ -130,7 +145,7 @@ export default function LoginScreen() {
   );
 }
 
-/* auxiliar */
+/* componente auxiliar */
 function Labeled({ label, children }) {
   return (
     <View style={{ marginBottom: 12 }}>
@@ -139,11 +154,23 @@ function Labeled({ label, children }) {
     </View>
   );
 }
+
 function isValidEmail(v) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
 
-/* estilos */
+function mapFirebaseAuthError(err) {
+  const code = err?.code || '';
+  if (code === 'auth/invalid-email') return 'E-mail inválido.';
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Credenciais inválidas.';
+  if (code === 'auth/user-disabled') return 'Usuário desabilitado.';
+  if (code === 'auth/user-not-found') return 'Usuário não encontrado.';
+  if (code === 'auth/too-many-requests') return 'Muitas tentativas. Tente novamente mais tarde.';
+  if (code === 'auth/network-request-failed') return 'Sem conexão. Verifique sua internet.';
+  return 'Ocorreu um erro inesperado.';
+}
+
+/* estilos (mantive seu padrão) */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#fff' },
 
@@ -154,34 +181,17 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 8,
   },
-  closeBtn: {
-    marginLeft: 8,
-  },
-  close: {
-    fontSize: 28,
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.primary,
-    flex: 1,
-    textAlign: 'center',
-  },
+  closeBtn: { marginLeft: 8 },
+  close: { fontSize: 28, color: colors.primary, fontWeight: '700' },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: colors.primary, flex: 1, textAlign: 'center' },
 
-  // Centraliza realmente o conteúdo
   centerWrapper: {
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 16,
-    marginTop: 10, // leve espaço abaixo do header
+    marginTop: 10,
   },
-  form: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-  },
+  form: { width: '100%', maxWidth: 420, alignSelf: 'center' },
 
   label: { fontSize: 13, color: '#333', fontWeight: '700', marginBottom: 6 },
   input: {

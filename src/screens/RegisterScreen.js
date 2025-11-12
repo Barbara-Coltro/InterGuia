@@ -3,9 +3,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -14,9 +16,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
+import { signUpEmailPassword } from '../services/auth';
 import colors from '../theme/colors';
+
+
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
@@ -27,55 +32,119 @@ export default function RegisterScreen() {
   const [bio, setBio] = useState('');
   const [avatar, setAvatar] = useState(null);
 
-  // visibilidade das senhas
   const [showPass, setShowPass] = useState(false);
   const [showPass2, setShowPass2] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const phoneMasked = useMemo(() => maskPhone(phone), [phone]);
 
-  // estados de erro em tempo real
   const emailTouched = email.length > 0;
   const emailInvalid = emailTouched && !isValidEmail(email);
   const pass2Touched = pass2.length > 0;
   const passMismatch = pass2Touched && pass2 !== pass;
 
-  // obrigatórios p/ habilitar botão
   const validBasic =
     name.trim().length > 0 &&
     isValidEmail(email) &&
-    pass.length > 0 &&
+    pass.length >= 6 &&         // mínimo 6 (aproveitando sua dica)
     pass2.length > 0 &&
     pass2 === pass;
 
-  async function pickImage() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Autorize o acesso às imagens para escolher uma foto.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-    if (!result.canceled && result.assets?.length) {
-      const asset = result.assets[0];
-      setAvatar({ uri: asset.uri, fileName: asset.fileName || 'foto-perfil.jpg' });
-    }
-  }
+async function pickImage() {
+  try {
+    console.log('[pickImage] onPress'); // diagnóstico
 
-  function onSubmit() {
-    if (!validBasic) {
-      Alert.alert('Verifique os campos', 'Preencha Nome, E-mail válido e Senhas idênticas.');
+    // 1) Checa permissão atual
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+    console.log('[pickImage] current.permission:', current);
+
+    // 2) Se ainda não pediu, pede agora
+    let final = current;
+    if (!current.granted && current.status !== 'denied') {
+      final = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('[pickImage] requested permission:', final);
+    }
+
+    // 3) Se negado, sugere abrir configurações
+    if (!final.granted) {
+      Alert.alert(
+        'Permissão necessária',
+        'Precisamos de acesso às suas fotos para escolher a imagem.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+        ]
+      );
       return;
     }
-    Alert.alert(
-      'Cadastro concluído',
-      'Parabéns! Você se cadastrou. Clique em OK para fazer Login.',
-      [{ text: 'OK', onPress: () => router.replace('/login') }],
-      { cancelable: false }
-    );
+
+    // 4) Abre o seletor de imagens
+    const result = await ImagePicker.launchImageLibraryAsync({
+mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsEditing: true,   // em Android pode ser ignorado
+      aspect: [1, 1],
+      base64: false,
+      presentationStyle: 'fullScreen', // iOS: evita picker "sumir" em alguns casos
+    });
+
+    console.log('[pickImage] result:', result);
+
+    // 5) Se cancelou, não faz nada
+    if (result.canceled) {
+      return;
+    }
+
+    // 6) Pega o asset selecionado
+    const asset = result.assets?.[0];
+    if (!asset?.uri) {
+      Alert.alert('Ops', 'Não foi possível obter o arquivo selecionado.');
+      return;
+    }
+
+    setAvatar({
+      uri: asset.uri,
+      fileName: asset.fileName || 'avatar.jpg',
+      mimeType: asset.mimeType || 'image/jpeg',
+    });
+  } catch (e) {
+    console.log('[pickImage] error:', e);
+    Alert.alert('Erro', 'Não foi possível abrir suas fotos. Tente novamente.');
+  }
+}
+
+
+  async function onSubmit() {
+    if (!validBasic) {
+      Alert.alert('Verifique os campos', 'Preencha Nome, E-mail válido e Senhas idênticas (mín. 6).');
+      return;
+    }
+    try {
+      setLoading(true);
+      await signUpEmailPassword({
+        name: name.trim(),
+        email: email.trim(),
+        password: pass,
+        phone: unmaskDigits(phone),
+        bio: bio.trim(),
+        avatarUri: avatar?.uri, // opcional
+        avatarMime: avatar?.mimeType,   // 👈 novo
+        avatarName: avatar?.fileName,   // 👈 novo
+      });
+
+      Alert.alert(
+        'Cadastro concluído',
+        'Parabéns! Você se cadastrou. Clique em OK para fazer Login.',
+        [{ text: 'OK', onPress: () => router.replace('/login') }],
+        { cancelable: false }
+      );
+    } catch (err) {
+      console.log('SIGNUP ERROR', err);
+      const msg = mapSignupErr(err);
+      Alert.alert('Não foi possível cadastrar', msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -157,6 +226,7 @@ export default function RegisterScreen() {
                     <Ionicons name={showPass ? 'eye-off' : 'eye'} size={22} color="#666" />
                   </TouchableOpacity>
                 </View>
+                <Text style={styles.hintText}>mínimo 6 caracteres</Text>
               </Labeled>
 
               <Labeled label="Repetir Senha" required style={{ flex: 1 }}>
@@ -208,14 +278,13 @@ export default function RegisterScreen() {
               />
             </Labeled>
 
-            {/* Botão habilita somente quando validBasic === true */}
             <TouchableOpacity
-              style={[styles.cta, !validBasic && styles.ctaDisabled]}
+              style={[styles.cta, (!validBasic || loading) && styles.ctaDisabled]}
               onPress={onSubmit}
               activeOpacity={0.9}
-              disabled={!validBasic}
+              disabled={!validBasic || loading}
             >
-              <Text style={styles.ctaText}>Cadastrar</Text>
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Cadastrar</Text>}
             </TouchableOpacity>
 
             <Text style={styles.terms}>
@@ -262,6 +331,16 @@ function maskPhone(raw = '') {
     [a && `(${a}`, a && ') ', b, b && '-', c].filter(Boolean).join('')
   );
 }
+
+function mapSignupErr(err) {
+  const code = err?.code || '';
+  if (code === 'auth/email-already-in-use') return 'Este e-mail já está cadastrado.';
+  if (code === 'auth/invalid-email') return 'E-mail inválido.';
+  if (code === 'auth/weak-password') return 'A senha é muito fraca (mínimo 6).';
+  if (code === 'auth/network-request-failed') return 'Sem conexão. Verifique sua internet.';
+  return 'Ocorreu um erro inesperado.';
+}
+
 
 /* estilos */
 const styles = StyleSheet.create({
@@ -343,3 +422,5 @@ const styles = StyleSheet.create({
   terms: { marginTop: 10, fontSize: 12, color: '#4F4F4F', textAlign: 'center', lineHeight: 16 },
   privacyLink: { color: colors.primary, fontWeight: '700', textDecorationLine: 'underline' },
 });
+
+
